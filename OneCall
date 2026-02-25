@@ -1,0 +1,28 @@
+import requests
+import xarray as xr
+import io
+
+base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20260224/00/atmos/gfs.t00z.pgrb2.0p25.f000"
+idx_url = base_url + ".idx"
+
+# Parse the index
+idx_lines = requests.get(idx_url).text.strip().split('\n')
+
+# Find start of UGRD and end of VGRD (start of record after VGRD minus 1)
+start = end = None
+for i, line in enumerate(idx_lines):
+    if 'UGRD:10 m above ground' in line:
+        start = int(line.split(':')[1])
+    if 'VGRD:10 m above ground' in line:
+        end = int(idx_lines[i + 1].split(':')[1]) - 1
+        break
+
+if start is None or end is None:
+    raise ValueError("Could not find UGRD/VGRD in index file")
+
+# Fetch single contiguous byte range and open once
+r = requests.get(base_url, headers={'Range': f'bytes={start}-{end}'})
+r.raise_for_status()
+
+ds = xr.open_dataset(io.BytesIO(r.content), engine='cfgrib')
+print(ds)
