@@ -1,0 +1,40 @@
+import requests
+import xarray as xr
+import cfgrib
+import io
+
+base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20260224/00/atmos/gfs.t00z.pgrb2.0p25.f000"
+idx_url = base_url + ".idx"
+
+# Fetch and parse the index file
+idx_lines = requests.get(idx_url).text.strip().split('\n')
+
+def get_byte_range(idx_lines, match_str):
+    for i, line in enumerate(idx_lines):
+        if match_str in line:
+            start = int(line.split(':')[1])
+            # End byte is the start of the next record minus 1
+            end = int(idx_lines[i + 1].split(':')[1]) - 1
+            return start, end
+    raise ValueError(f"Could not find match for: {match_str}")
+
+# Get byte ranges
+ugrd_start, ugrd_end = get_byte_range(idx_lines, 'UGRD:10 m above ground')
+vgrd_start, vgrd_end = get_byte_range(idx_lines, 'VGRD:10 m above ground')
+
+def fetch_grib_chunk(url, start, end):
+    headers = {'Range': f'bytes={start}-{end}'}
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.content
+
+# Download each chunk and open with xarray
+ugrd_bytes = fetch_grib_chunk(base_url, ugrd_start, ugrd_end)
+vgrd_bytes = fetch_grib_chunk(base_url, vgrd_start, vgrd_end)
+
+ds_ugrd = xr.open_dataset(io.BytesIO(ugrd_bytes), engine='cfgrib')
+ds_vgrd = xr.open_dataset(io.BytesIO(vgrd_bytes), engine='cfgrib')
+
+# Merge into a single dataset
+ds = xr.merge([ds_ugrd, ds_vgrd])
+print(ds)
