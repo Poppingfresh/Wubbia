@@ -1,0 +1,25 @@
+import requests
+import xarray as xr
+import cfgrib
+import io
+
+base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20260224/00/atmos/gfs.t00z.pgrb2.0p25.f000"
+
+# Hardcoded byte offsets from .idx
+# End byte = next record's start - 1
+chunks = {
+    'ugrd': (405067294, 406035325),  # 585, end = 586 start - 1
+    'vgrd': (406035326, 406983622),  # 586, end = 587 start - 1
+}
+
+def fetch_chunk(url, start, end):
+    headers = {'Range': f'bytes={start}-{end}'}
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return r.content
+
+ugrd_ds = xr.open_dataset(io.BytesIO(fetch_chunk(base_url, *chunks['ugrd'])), engine='cfgrib')
+vgrd_ds = xr.open_dataset(io.BytesIO(fetch_chunk(base_url, *chunks['vgrd'])), engine='cfgrib')
+
+ds = xr.merge([ugrd_ds, vgrd_ds])
+print(ds)
