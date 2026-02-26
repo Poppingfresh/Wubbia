@@ -2,16 +2,24 @@ import urllib.request
 import tempfile
 import cfgrib
 import xarray as xr
+import os
 
 base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20260224/00/atmos/gfs.t00z.pgrb2.0p25.f000"
 
-with tempfile.NamedTemporaryFile(suffix='.grb2') as tmp:
-    print("Downloading...")
-    urllib.request.urlretrieve(base_url, tmp.name)
-    print("Opening datasets...")
-    datasets = cfgrib.open_datasets(tmp.name)
-    ds = xr.merge(datasets, compat='override')
+# Create temp file but don't auto-delete so urlretrieve can write to it
+tmp = tempfile.NamedTemporaryFile(suffix='.grb2', delete=False)
+tmp_path = tmp.name
+tmp.close()  # Close it so urlretrieve can write to it
 
-# ds is still accessible here, but the temp file is gone
+try:
+    print("Downloading...")
+    urllib.request.urlretrieve(base_url, tmp_path)
+    print("Opening datasets...")
+    datasets = cfgrib.open_datasets(tmp_path)
+    ds = xr.merge(datasets, compat='override')
+finally:
+    os.remove(tmp_path)  # Always clean up even if an error occurs
+
 u10 = ds['u10']
 v10 = ds['v10']
+print(ds)
